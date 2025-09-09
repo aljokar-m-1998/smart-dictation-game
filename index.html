@@ -1,0 +1,904 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Smart Dictation</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --fg:#111; --muted:#666; --primary:#1565c0; --ok:#2e7d32; --err:#c62828;
+    --card:#fff; --border:#e5e7eb; --accent:#ffb300;
+  }
+  .dark{
+    --bg:#0e0f12; --fg:#e6e6e6; --muted:#a9abb3; --primary:#64b5f6; --ok:#81c784; --err:#ef5350;
+    --card:#14161a; --border:#2a2d33; --accent:#ffd54f;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+    background:var(--bg); color:var(--fg);
+  }
+  .app{max-width:900px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:16px;}
+  header{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .title{font-weight:700; font-size:20px; letter-spacing:.2px;}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.03);
+  }
+  .controls{display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:12px;}
+  label{font-size:13px; color:var(--muted); display:block; margin-bottom:4px;}
+  select, input[type="text"], input[type="number"], input[type="range"]{
+    width:100%; padding:10px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--fg);
+    outline:none;
+  }
+  button{
+    border:none; background:var(--primary); color:#fff; padding:10px 14px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  button.ghost{background:transparent; color:var(--fg); border:1px solid var(--border);}
+  button.ok{background:var(--ok);} button.err{background:var(--err);}
+  .grid-2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .stack{display:flex; flex-direction:column; gap:8px;}
+  .prompt{
+    font-size:16px; color:var(--muted);
+  }
+  .bigbtn{font-size:16px; padding:12px 16px;}
+  .input-area{display:flex; gap:8px; align-items:center;}
+  .input-area input{flex:1; font-size:16px;}
+  .status{min-height:22px; font-size:14px;}
+  .status.ok{color:var(--ok);} .status.err{color:var(--err);}
+  .hint{font-size:13px; color:var(--muted);}
+  .pill{display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:1px solid var(--border); border-radius:999px; background:var(--card);}
+  .kpi{display:flex; gap:12px; flex-wrap:wrap;}
+  .kpi .box{min-width:120px; flex:1; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:10px;}
+  .kpi .val{font-weight:800; font-size:18px;}
+  .divider{height:1px; background:var(--border); margin:8px 0;}
+  .flex{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .justify{justify-content:space-between;}
+  .mt8{margin-top:8px;} .mt12{margin-top:12px;} .mt16{margin-top:16px;}
+  .sr-only{position:absolute; left:-9999px;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap;}
+  .badge{background:transparent; border:1px dashed var(--border); color:var(--muted); padding:6px 10px; border-radius:999px; font-size:12px;}
+  .badge.active{border-style:solid; color:var(--fg);}
+  .list{max-height:180px; overflow:auto; border:1px solid var(--border); border-radius:10px; padding:8px; background:var(--card);}
+  .list-item{display:flex; justify-content:space-between; padding:6px 8px; border-bottom:1px dashed var(--border); font-size:14px;}
+  .list-item:last-child{border-bottom:none;}
+  .mini{font-size:12px; color:var(--muted);}
+  .right{margin-left:auto;}
+  .tag{font-size:11px; color:#fff; background:var(--accent); border-radius:6px; padding:2px 6px;}
+  .toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--card); color:var(--fg); border:1px solid var(--border); padding:10px 14px; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.2); display:none;}
+  .show{display:block;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <div class="title">Smart Dictation</div>
+    <div class="row">
+      <button id="toggleTheme" class="ghost" aria-label="Toggle dark mode">Night mode</button>
+      <button id="resetData" class="ghost" aria-label="Reset all data">Reset</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="controls">
+      <div>
+        <label for="mode">Mode</label>
+        <select id="mode" aria-label="Select game mode">
+          <option value="training">Training</option>
+          <option value="competitive">Competitive</option>
+          <option value="speed">Speed 60s</option>
+          <option value="reverse">Reverse dictation</option>
+          <option value="story">Short story</option>
+        </select>
+      </div>
+      <div>
+        <label for="difficulty">Difficulty</label>
+        <select id="difficulty" aria-label="Select difficulty">
+          <option value="beginner">Beginner</option>
+          <option value="intermediate">Intermediate</option>
+          <option value="advanced">Advanced</option>
+          <option value="mixed">Mixed</option>
+        </select>
+      </div>
+      <div>
+        <label for="voice">Voice (en-US / en-GB)</label>
+        <select id="voice" aria-label="Select TTS voice"></select>
+      </div>
+      <div>
+        <label for="rate">Speech rate: <span id="rateVal">0.95</span></label>
+        <input id="rate" type="range" min="0.7" max="1.2" step="0.05" value="0.95" />
+      </div>
+      <div>
+        <label for="timer">Timer (competitive)</label>
+        <select id="timer">
+          <option value="60">60s</option>
+          <option value="90">90s</option>
+          <option value="120">120s</option>
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <div class="row">
+          <span class="pill"><input type="checkbox" id="hints" /> <label for="hints">Hints</label></span>
+          <span class="pill"><input type="checkbox" id="strictPunct" /> <label for="strictPunct">Strict punctuation</label></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid-2">
+      <div class="stack">
+        <div class="prompt" id="prompt">Press "Listen" to start.</div>
+        <div class="flex">
+          <button id="btnListen" class="bigbtn" aria-label="Play dictation audio">🔊 Listen</button>
+          <button id="btnRepeat" class="ghost" aria-label="Repeat audio">Repeat</button>
+          <button id="btnSkip" class="ghost" aria-label="Skip">Skip</button>
+        </div>
+        <div class="hint" id="hintArea" aria-live="polite"></div>
+      </div>
+      <div class="stack">
+        <div class="input-area">
+          <input id="answer" type="text" inputmode="latin" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Type what you heard..." aria-label="Your answer"/>
+          <button id="btnSubmit" class="ok" aria-label="Submit answer">Submit</button>
+        </div>
+        <div class="status" id="status" aria-live="polite"></div>
+        <div class="row">
+          <button id="btnShow" class="ghost" aria-label="Show correct">Show</button>
+          <button id="btnAddReview" class="ghost" aria-label="Add to review">Add to Review</button>
+        </div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="flex justify">
+      <div class="kpi">
+        <div class="box"><div class="mini">Accuracy</div><div class="val" id="kpiAccuracy">0%</div></div>
+        <div class="box"><div class="mini">Streak</div><div class="val" id="kpiStreak">0</div></div>
+        <div class="box"><div class="mini">Speed</div><div class="val" id="kpiSpeed">0.0s</div></div>
+        <div class="box"><div class="mini">Timer</div><div class="val" id="kpiTimer">—</div></div>
+      </div>
+      <div class="badges" id="badges"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="grid-2">
+      <div class="stack">
+        <div class="flex justify"><strong>Review list</strong><button id="btnPracticeReview" class="ghost right">Practice Review</button></div>
+        <div class="list" id="reviewList" aria-label="Review list"></div>
+      </div>
+      <div class="stack">
+        <strong>Statistics</strong>
+        <div class="list">
+          <div class="list-item"><span>Total correct</span><span id="statTotalCorrect">0</span></div>
+          <div class="list-item"><span>Total attempts</span><span id="statTotalAttempts">0</span></div>
+          <div class="list-item"><span>Best streak</span><span id="statBestStreak">0</span></div>
+          <div class="list-item"><span>Avg time/attempt</span><span id="statAvgTime">0.0s</span></div>
+          <div class="list-item"><span>Top mistakes</span><span id="statTopMistakes">—</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* =========================
+   Storage (versioned)
+========================= */
+const Storage = (() => {
+  const KEY = 'sdx:data';
+  const VERSION = 1;
+  const defaults = {
+    v: VERSION,
+    settings: {
+      mode: 'training',
+      difficulty: 'beginner',
+      voice: '',
+      rate: 0.95,
+      timer: 60,
+      hints: true,
+      strictPunct: false,
+      theme: 'light'
+    },
+    stats: {
+      totalCorrect: 0,
+      totalAttempts: 0,
+      bestStreak: 0,
+      avgTime: 0, // seconds per attempt (EMA)
+      topMistakes: {}, // text -> count
+      badges: {} // id -> true
+    },
+    review: [], // array of {text, ts}
+    memory: { recent: [], recentMax: 50 },
+  };
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) return JSON.parse(JSON.stringify(defaults));
+      const data = JSON.parse(raw);
+      if (!data.v || data.v < VERSION) {
+        // migration hook if needed later
+        data.v = VERSION;
+      }
+      // hydrate missing
+      return Object.assign({}, defaults, data, {
+        settings: Object.assign({}, defaults.settings, data.settings || {}),
+        stats: Object.assign({}, defaults.stats, data.stats || {}),
+        memory: Object.assign({}, defaults.memory, data.memory || {}),
+      });
+    } catch(e){
+      console.warn('Storage load error', e);
+      return JSON.parse(JSON.stringify(defaults));
+    }
+  }
+  let state = load();
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){ console.warn('Storage save error', e); }
+  }
+  function set(path, val){
+    const parts = path.split('.');
+    let ref = state;
+    for (let i=0;i<parts.length-1;i++){ const p=parts[i]; ref[p]=ref[p]??{}; ref=ref[p]; }
+    ref[parts[parts.length-1]] = val;
+    save();
+  }
+  function get(path, fallback){
+    const parts = path.split('.');
+    let ref = state;
+    for (let p of parts){
+      if (ref==null) return fallback;
+      ref = ref[p];
+    }
+    return ref==null?fallback:ref;
+  }
+  function reset(){ state = JSON.parse(JSON.stringify(defaults)); save(); return state; }
+  function pushReview(text){
+    const exists = state.review.find(r=>r.text===text);
+    if (!exists) {
+      state.review.unshift({text, ts: Date.now()});
+      if (state.review.length>200) state.review.pop();
+      save();
+    }
+  }
+  function removeReview(text){
+    state.review = state.review.filter(r=>r.text!==text); save();
+  }
+  function updateStats({correct, time, text}){
+    const s = state.stats;
+    s.totalAttempts += 1;
+    if (correct) s.totalCorrect += 1;
+    // EMA for avg time
+    const alpha = 0.15;
+    s.avgTime = s.avgTime<=0 ? time : (alpha*time + (1-alpha)*s.avgTime);
+    // streaks handled by Game
+    if (!correct){
+      s.topMistakes[text] = (s.topMistakes[text]||0) + 1;
+      // also push to review
+      pushReview(text);
+    }
+    save();
+  }
+  function setBadge(id){ state.stats.badges[id]=true; save(); }
+  function hasBadge(id){ return !!state.stats.badges[id]; }
+  function addRecent(text){
+    const mem = state.memory;
+    mem.recent.unshift(text);
+    mem.recent = [...new Set(mem.recent)]; // dedupe
+    if (mem.recent.length>mem.recentMax) mem.recent.length = mem.recentMax;
+    save();
+  }
+  return { get,set,reset,state:()=>state, pushReview, removeReview, updateStats, setBadge, hasBadge, addRecent, save };
+})();
+
+/* =========================
+   Utility
+========================= */
+const Util = (() => {
+  const normPunctMap = {
+    '“':'"', '”':'"', '‘':"'", '’':"'", '—':'-', '–':'-', '…':'...', '‚':',', '´':"'", '•':'-', '«':'"', '»':'"'
+  };
+  function normalize(str){
+    if (typeof str !== 'string') return '';
+    let s = str.trim().toLowerCase();
+    s = s.replace(/\s+/g,' ');
+    s = s.split('').map(ch => normPunctMap[ch] ?? ch).join('');
+    return s;
+  }
+  function stripPunct(s){
+    return s.replace(/[.,!?;:()[\]{}"'-]/g,'').replace(/\s+/g,' ').trim();
+  }
+  function levenshtein(a,b){
+    a = a || ''; b = b || '';
+    const m=a.length, n=b.length;
+    const dp = Array.from({length:m+1},()=>Array(n+1).fill(0));
+    for (let i=0;i<=m;i++) dp[i][0]=i;
+    for (let j=0;j<=n;j++) dp[0][j]=j;
+    for (let i=1;i<=m;i++){
+      for (let j=1;j<=n;j++){
+        const cost = a[i-1]===b[j-1]?0:1;
+        dp[i][j] = Math.min(
+          dp[i-1][j]+1,
+          dp[i][j-1]+1,
+          dp[i-1][j-1]+cost
+        );
+      }
+    }
+    return dp[m][n];
+  }
+  function randPick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function seededShuffle(arr){
+    // lightweight shuffle
+    const a = arr.slice();
+    for (let i=a.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [a[i],a[j]]=[a[j],a[i]];
+    }
+    return a;
+  }
+  function toast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 1600);
+  }
+  return { normalize, stripPunct, levenshtein, randPick, seededShuffle, toast };
+})();
+
+/* =========================
+   Generator (infinite)
+========================= */
+const Generator = (() => {
+  // Core vocab pools (extendable). Small seeds + combinatorics => virtually infinite.
+  const nounsCommon = ["apple","teacher","computer","river","city","friend","idea","music","story","garden","phone","market","family","night","morning","research","coffee","planet","student","movie"];
+  const verbsBase = ["run","write","jump","drink","fly","build","learn","watch","create","plan","improve","discuss","measure","deliver","solve","travel","listen","review","share","guide"];
+  const verbs3s = ["runs","writes","jumps","drinks","flies","builds","learns","watches","creates","plans","improves","discusses","measures","delivers","solves","travels","listens","reviews","shares","guides"];
+  const adjectives = ["beautiful","fast","smart","happy","cold","curious","reliable","modern","quiet","bright","tiny","massive","critical","fresh","gentle","bold","patient","elegant","silent","rare"];
+  const adverbs = ["quickly","silently","happily","carefully","loudly","often","rarely","barely","almost","eagerly","frankly","truly","roughly","calmly","clearly","easily","neatly","politely","slowly","suddenly"];
+  const connectors = ["because","although","while","before","after","if","when","unless","as","since"];
+  const preps = ["in","on","at","near","behind","under","above","between","through","inside"];
+  const irregularPast = ["went","saw","took","made","found","thought","came","knew","gave","felt","kept","left","began","brought","wrote","stood","heard","held","met","paid"];
+  const academic = ["analyze","approach","assess","concept","context","derive","establish","indicate","interpret","significant","hypothesis","method","outcome","process","role","source","theory","variable","evidence","impact"];
+
+  const templatesBeginner = [
+    "{N1} {V3} {ADV}.",
+    "The {ADJ} {N1} {V3}.",
+    "{N1} {V3} in the {N1}.",
+    "A {ADJ} {N1} {V3} {ADV}.",
+    "They {V} {ADV}.",
+  ];
+  const templatesIntermediate = [
+    "The {ADJ} {N1} {V3} {PREP} the {N1}.",
+    "{N1} {V3} {ADV} {PREP} the {ADJ} {N1}.",
+    "People often {V} {PREP} the {N1}.",
+    "We {V} to {V} the {N1}.",
+    "{N1} was {VPP} yesterday.",
+  ];
+  const templatesAdvanced = [
+    "{CONJ} the {ADJ} {N1} {V3}, we {V} {ADV}.",
+    "If we {V} the {N1}, the result may {V}.",
+    "Although it sounds {ADJ}, the {N1} can be {ADJ}.",
+    "Researchers {V} the {N1} to {V} better outcomes.",
+    "The {N1}, which was {VPP} last week, {V3} again today."
+  ];
+
+  // Past participles approximation from verbsBase (naive; demo purposes)
+  function toVPP(v){ // very rough, for demo
+    if (["write","create","make"].includes(v)) return "created"; // simplification
+    if (v.endsWith("e")) return v+"d";
+    if (v.endsWith("y")) return v.slice(0,-1)+"ied";
+    return v+"ed";
+  }
+
+  function buildFromTemplate(t){
+    // Replace tokens; multiple occurrences can appear
+    let s = t;
+    // basic picks
+    const N1 = Util.randPick(nounsCommon);
+    const N2 = Util.randPick(nounsCommon);
+    const V = Util.randPick(verbsBase);
+    const V2 = Util.randPick(verbsBase);
+    const V3 = Util.randPick(verbs3s);
+    const ADJ = Util.randPick(adjectives);
+    const ADV = Math.random()<0.8 ? Util.randPick(adverbs) : ""; // optional
+    const CONJ = Util.randPick(connectors);
+    const PREP = Util.randPick(preps);
+    const VPP = Math.random()<0.5 ? Util.randPick(irregularPast) : toVPP(Util.randPick(verbsBase));
+
+    s = s.replaceAll("{N1}", N1)
+         .replaceAll("{N2}", N2)
+         .replaceAll("{V3}", V3)
+         .replaceAll("{V}", V)
+         .replaceAll("{V2}", V2)
+         .replaceAll("{ADJ}", ADJ)
+         .replaceAll("{ADV}", ADV).replaceAll("  "," ")
+         .replaceAll("{CONJ}", CONJ)
+         .replaceAll("{PREP}", PREP)
+         .replaceAll("{VPP}", VPP);
+    // capitalization
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+    // punctuation ensure period
+    if (!/[.!?]$/.test(s)) s += ".";
+    return s.trim();
+  }
+
+  function chooseTemplate(level){
+    if (level==='beginner') return Util.randPick(templatesBeginner);
+    if (level==='intermediate') return Util.randPick(templatesIntermediate);
+    if (level==='advanced') return Util.randPick(templatesAdvanced);
+    // mixed
+    return Util.randPick([].concat(templatesBeginner,templatesIntermediate,templatesAdvanced));
+  }
+
+  function nextText(level){
+    const t = chooseTemplate(level);
+    let s = buildFromTemplate(t);
+    // diversify with optional insertions for advanced/mixed
+    if (level==='advanced' || level==='mixed'){
+      if (Math.random()<0.25){
+        const add = Util.randPick(academic);
+        s = s.replace(/\.$/," "+add+".");
+      }
+    }
+    return s;
+  }
+
+  function nextNonRepeating(level){
+    const text = nextText(level);
+    const recent = Storage.state().memory.recent;
+    if (recent.includes(text)) return nextNonRepeating(level);
+    Storage.addRecent(text);
+    return text;
+  }
+
+  // Review pack generator (prioritize review list)
+  function fromReview(){
+    const rev = Storage.state().review;
+    if (!rev.length) return null;
+    const pick = Util.randPick(rev);
+    Storage.addRecent(pick.text);
+    return pick.text;
+  }
+
+  return { next: nextNonRepeating, fromReview };
+})();
+
+/* =========================
+   TTS (speechSynthesis)
+========================= */
+const TTS = (() => {
+  let voices = [];
+  function loadVoices(){
+    voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    return voices;
+  }
+  function listVoices(){
+    const all = loadVoices();
+    // filter English voices, prioritize en-US/en-GB
+    const filtered = all.filter(v => /en(-|_)(US|GB)/i.test(v.lang));
+    // fallback: any English
+    const anyEn = all.filter(v => /^en/i.test(v.lang));
+    const out = filtered.length?filtered:anyEn;
+    return out;
+  }
+  function speak(text, {voiceName, rate=0.95}={}){
+    return new Promise((resolve,reject)=>{
+      if (!('speechSynthesis' in window)) { reject(new Error('TTS not supported')); return; }
+      const u = new SpeechSynthesisUtterance(text);
+      u.rate = rate;
+      const vs = listVoices();
+      if (voiceName){
+        const v = vs.find(v => v.name===voiceName);
+        if (v) u.voice = v;
+      } else {
+        // default: en-US first, then en-GB
+        const pref = vs.find(v=>/en(-|_)US/i.test(v.lang)) || vs.find(v=>/en(-|_)GB/i.test(v.lang));
+        if (pref) u.voice = pref;
+      }
+      u.onend = () => resolve();
+      u.onerror = (e) => reject(e.error||e);
+      speechSynthesis.cancel(); // cancel any previous
+      speechSynthesis.speak(u);
+    });
+  }
+  return { listVoices, speak };
+})();
+
+/* =========================
+   Evaluator
+========================= */
+const Evaluator = (() => {
+  function compare(user, target, {level, strictPunct}){
+    const u = Util.normalize(user);
+    const t = Util.normalize(target);
+    let uC = u, tC = t;
+    if (!strictPunct || level==='beginner' || level==='intermediate'){
+      // ignore punctuation in easier levels
+      uC = Util.stripPunct(uC);
+      tC = Util.stripPunct(tC);
+    }
+    // ignore multiple spaces already handled
+    let exact = (uC === tC);
+    let near = false;
+    if (!exact && level==='beginner'){
+      // allow a small typo
+      const d = Util.levenshtein(uC, tC);
+      near = (d <= 1 && Math.abs(uC.length - tC.length) <= 1);
+    }
+    return { exact: exact || near, near, normalizedUser:uC, normalizedTarget:tC };
+  }
+  return { compare };
+})();
+
+/* =========================
+   Badges
+========================= */
+const Badges = (() => {
+  const defs = [
+    {id:'streak10', label:'10 streak'},
+    {id:'hundredCorrect', label:'100 correct'},
+    {id:'punctMaster', label:'Punctuation master'},
+  ];
+  function evaluate({streak, totalCorrect, strictPunct}){
+    if (streak>=10) Storage.setBadge('streak10');
+    if (totalCorrect>=100) Storage.setBadge('hundredCorrect');
+    if (strictPunct) Storage.setBadge('punctMaster');
+  }
+  function render(container){
+    const nodes = defs.map(b=>{
+      const active = Storage.hasBadge(b.id);
+      return `<span class="badge ${active?'active':''}">${b.label}</span>`;
+    });
+    container.innerHTML = nodes.join('');
+  }
+  return { evaluate, render };
+})();
+
+/* =========================
+   Game Session
+========================= */
+const Game = (() => {
+  let currentText = '';
+  let startTs = 0;
+  let streak = 0;
+  let timerId = null;
+  let timeLeft = 0;
+  let mode = 'training';
+  let storyLeft = 0;
+
+  function settings(){
+    return {
+      mode: document.getElementById('mode').value,
+      difficulty: document.getElementById('difficulty').value,
+      voice: document.getElementById('voice').value,
+      rate: parseFloat(document.getElementById('rate').value),
+      timer: parseInt(document.getElementById('timer').value,10),
+      hints: document.getElementById('hints').checked,
+      strictPunct: document.getElementById('strictPunct').checked
+    };
+  }
+  function applyAdaptiveDifficulty(acc){
+    if (document.getElementById('difficulty').value!=='mixed') return;
+    // simple adaptation: move across pools by streak/accuracy
+    if (streak>=6) document.getElementById('difficulty').value='advanced';
+    else if (streak>=3) document.getElementById('difficulty').value='intermediate';
+    else document.getElementById('difficulty').value='beginner';
+  }
+  function nextPrompt({preferReview=false}={}){
+    const s = settings();
+    if (preferReview){
+      const r = Generator.fromReview();
+      if (r) { currentText = r; return r; }
+    }
+    currentText = Generator.next(s.difficulty);
+    return currentText;
+  }
+  function playPrompt(){
+    const s = settings();
+    if (!currentText) nextPrompt();
+    startTs = performance.now();
+    return TTS.speak(currentText, {voiceName:s.voice, rate:s.rate}).catch(()=>{});
+  }
+  function repeatPrompt(){
+    const s = settings();
+    if (!currentText) return;
+    return TTS.speak(currentText, {voiceName:s.voice, rate:s.rate}).catch(()=>{});
+  }
+  function timePerAttempt(){
+    if (!startTs) return 0;
+    return Math.max(0, (performance.now()-startTs)/1000);
+  }
+  function beginMode(){
+    const s = settings();
+    mode = s.mode;
+    streak = 0;
+    storyLeft = 0;
+    clearInterval(timerId); timerId=null;
+    document.getElementById('kpiTimer').textContent = mode==='training' || mode==='reverse' ? '—' : s.timer+'s';
+    if (mode==='competitive' || mode==='speed'){
+      timeLeft = mode==='competitive' ? s.timer : 60;
+      document.getElementById('kpiTimer').textContent = timeLeft+'s';
+      timerId = setInterval(()=>{
+        timeLeft--;
+        document.getElementById('kpiTimer').textContent = timeLeft+'s';
+        if (timeLeft<=0){
+          clearInterval(timerId); timerId=null;
+          Util.toast('Time up!');
+          // auto start new session
+        }
+      },1000);
+    } else if (mode==='story'){
+      storyLeft = Math.floor(5 + Math.random()*3); // 5–7 sentences
+      document.getElementById('kpiTimer').textContent = storyLeft+' lines';
+    }
+    // set hint flags based on difficulty defaults
+    const diff = document.getElementById('difficulty').value;
+    const strict = (diff==='advanced') || document.getElementById('strictPunct').checked;
+    document.getElementById('strictPunct').checked = strict;
+    document.getElementById('hints').checked = (diff==='beginner') ? true : document.getElementById('hints').checked;
+    // load first prompt
+    nextPrompt();
+    renderHints();
+  }
+  function submitAnswer(){
+    const s = settings();
+    const input = document.getElementById('answer');
+    const status = document.getElementById('status');
+    const text = input.value || '';
+    if (!currentText){ Util.toast('Press Listen first'); return; }
+
+    const res = Evaluator.compare(text, currentText, {level:s.difficulty, strictPunct:s.strictPunct});
+    const took = timePerAttempt();
+    const wasCorrect = !!res.exact;
+
+    // stats
+    Storage.updateStats({correct:wasCorrect, time:took, text:currentText});
+    if (wasCorrect){ streak++; } else { streak=0; }
+    const st = Storage.state().stats;
+    if (streak>st.bestStreak){ Storage.set('stats.bestStreak', streak); }
+
+    // KPIs
+    renderKPIs({took});
+
+    // feedback
+    if (wasCorrect){
+      status.className='status ok';
+      status.textContent = 'Correct ✔';
+      showCorrect(1500);
+      if (mode==='competitive'){
+        // tiny bonus time
+        timeLeft = Math.min(timeLeft+2, settings().timer);
+      }
+    } else {
+      status.className='status err';
+      status.textContent = 'Incorrect ✖';
+      showCorrect(2000);
+    }
+
+    // badges
+    Badges.evaluate({streak, totalCorrect: st.totalCorrect, strictPunct: s.strictPunct});
+    Badges.render(document.getElementById('badges'));
+
+    // progress flow
+    input.value='';
+    if (mode==='story'){
+      storyLeft = Math.max(0, storyLeft - 1);
+      document.getElementById('kpiTimer').textContent = storyLeft+' lines';
+      if (storyLeft<=0){ Util.toast('Story complete!'); }
+    }
+    applyAdaptiveDifficulty(st.totalAttempts? (st.totalCorrect/st.totalAttempts) : 0);
+
+    // prepare next
+    nextPrompt();
+    renderHints();
+    // auto play if user wants continuous? keep manual to respect settings.
+  }
+
+  function showCorrect(ms=2000){
+    const hint = document.getElementById('hintArea');
+    hint.textContent = currentText;
+    setTimeout(()=>{ hint.textContent=''; }, ms);
+  }
+
+  function renderKPIs({took=0}={}){
+    const st = Storage.state().stats;
+    const acc = st.totalAttempts? Math.round((st.totalCorrect/st.totalAttempts)*100) : 0;
+    document.getElementById('kpiAccuracy').textContent = acc+'%';
+    document.getElementById('kpiStreak').textContent = String(streak);
+    const spd = took>0? took : st.avgTime;
+    document.getElementById('kpiSpeed').textContent = (spd? spd.toFixed(1):'0.0')+'s';
+
+    // stats panel
+    document.getElementById('statTotalCorrect').textContent = st.totalCorrect;
+    document.getElementById('statTotalAttempts').textContent = st.totalAttempts;
+    document.getElementById('statBestStreak').textContent = Storage.get('stats.bestStreak',0);
+    document.getElementById('statAvgTime').textContent = (st.avgTime? st.avgTime.toFixed(1):'0.0')+'s';
+    const top = Object.entries(st.topMistakes).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+    document.getElementById('statTopMistakes').textContent = top.length? top.join(' | ') : '—';
+  }
+
+  function renderHints(){
+    const s = settings();
+    const area = document.getElementById('hintArea');
+    if (!s.hints){ area.textContent=''; return; }
+    if (!currentText){ area.textContent=''; return; }
+    // First letter + length
+    const words = currentText.split(/\s+/);
+    const masked = words.map(w=>{
+      const core = w.replace(/[.,!?;:()"'-]/g,'');
+      if (!core) return w;
+      return core[0] + '•'.repeat(Math.max(0, core.length-1));
+    });
+    area.textContent = `Hint: ${masked.join(' ')}`;
+  }
+
+  function addToReview(){
+    if (!currentText) return;
+    Storage.pushReview(currentText);
+    renderReviewList();
+    Util.toast('Added to review');
+  }
+
+  function practiceReviewOnce(){
+    const r = Generator.fromReview();
+    if (r){ currentText = r; renderHints(); TTS.speak(currentText, {voiceName:settings().voice, rate:settings().rate}).catch(()=>{}); }
+    else Util.toast('Review list is empty');
+  }
+
+  return {
+    beginMode, playPrompt, repeatPrompt, submitAnswer, renderKPIs, addToReview, practiceReviewOnce,
+    getCurrent:()=>currentText
+  };
+})();
+
+/* =========================
+   UI Wiring
+========================= */
+(function init(){
+  // Theme
+  const themeBtn = document.getElementById('toggleTheme');
+  function applyTheme(){
+    const th = Storage.get('settings.theme','light');
+    document.body.classList.toggle('dark', th==='dark');
+    themeBtn.textContent = th==='dark' ? 'Light mode' : 'Night mode';
+  }
+  themeBtn.addEventListener('click', ()=>{
+    const curr = Storage.get('settings.theme','light');
+    const next = curr==='light'?'dark':'light';
+    Storage.set('settings.theme', next);
+    applyTheme();
+  });
+  applyTheme();
+
+  // Populate voices
+  const voiceSel = document.getElementById('voice');
+  function fillVoices(){
+    const vs = TTS.listVoices();
+    voiceSel.innerHTML = vs.map(v=>`<option value="${v.name}">${v.name} — ${v.lang}</option>`).join('');
+    const saved = Storage.get('settings.voice','');
+    if (saved && vs.find(v=>v.name===saved)) voiceSel.value = saved;
+    else {
+      // prefer en-US
+      const us = Array.from(voiceSel.options).find(o=>/en(-|_)US/i.test(o.textContent));
+      const gb = Array.from(voiceSel.options).find(o=>/en(-|_)GB/i.test(o.textContent));
+      voiceSel.value = us?.value || gb?.value || voiceSel.options[0]?.value || '';
+      Storage.set('settings.voice', voiceSel.value);
+    }
+  }
+  fillVoices();
+  if ('speechSynthesis' in window){
+    window.speechSynthesis.onvoiceschanged = () => { fillVoices(); };
+  }
+
+  // Load settings
+  document.getElementById('mode').value = Storage.get('settings.mode','training');
+  document.getElementById('difficulty').value = Storage.get('settings.difficulty','beginner');
+  document.getElementById('rate').value = Storage.get('settings.rate',0.95);
+  document.getElementById('rateVal').textContent = String(Storage.get('settings.rate',0.95));
+  document.getElementById('timer').value = Storage.get('settings.timer',60);
+  document.getElementById('hints').checked = Storage.get('settings.hints',true);
+  document.getElementById('strictPunct').checked = Storage.get('settings.strictPunct', false);
+
+  // Render review list and KPIs
+  renderReviewList();
+  Game.renderKPIs({});
+
+  // Events
+  document.getElementById('mode').addEventListener('change', e=>{
+    Storage.set('settings.mode', e.target.value);
+    Game.beginMode();
+    Game.renderKPIs({});
+  });
+  document.getElementById('difficulty').addEventListener('change', e=>{
+    Storage.set('settings.difficulty', e.target.value);
+    Game.beginMode();
+  });
+  document.getElementById('voice').addEventListener('change', e=>{
+    Storage.set('settings.voice', e.target.value);
+  });
+  document.getElementById('rate').addEventListener('input', e=>{
+    const v = parseFloat(e.target.value);
+    document.getElementById('rateVal').textContent = v.toFixed(2);
+    Storage.set('settings.rate', v);
+  });
+  document.getElementById('timer').addEventListener('change', e=>{
+    Storage.set('settings.timer', parseInt(e.target.value,10));
+    if (document.getElementById('mode').value==='competitive') Game.beginMode();
+  });
+  document.getElementById('hints').addEventListener('change', e=>{
+    Storage.set('settings.hints', !!e.target.checked);
+    Game.beginMode();
+  });
+  document.getElementById('strictPunct').addEventListener('change', e=>{
+    Storage.set('settings.strictPunct', !!e.target.checked);
+  });
+
+  // Action buttons
+  document.getElementById('btnListen').addEventListener('click', ()=>{
+    // Special behavior per mode
+    const mode = document.getElementById('mode').value;
+    if (mode==='reverse'){
+      Util.toast('Type any English word, then Submit to hear it.');
+      return;
+    }
+    if (!Game.getCurrent()) Game.beginMode();
+    Game.playPrompt();
+  });
+  document.getElementById('btnRepeat').addEventListener('click', ()=>{ Game.repeatPrompt(); });
+  document.getElementById('btnSkip').addEventListener('click', ()=>{
+    Game.beginMode();
+    Util.toast('Skipped');
+  });
+  document.getElementById('btnSubmit').addEventListener('click', ()=>{
+    const mode = document.getElementById('mode').value;
+    if (mode==='reverse'){
+      // In reverse: speak user input, mark correct if it's a known pattern (letters only and >1 char)
+      const txt = document.getElementById('answer').value.trim();
+      if (!txt){ Util.toast('Type a word'); return; }
+      TTS.speak(txt, {voiceName:Storage.get('settings.voice',''), rate:Storage.get('settings.rate',0.95)}).catch(()=>{});
+      // consider "correct" if input has only letters and length>=2
+      const ok = /^[a-zA-Z][a-zA-Z-']{1,}$/.test(txt);
+      Storage.updateStats({correct:ok, time:1.0, text:txt});
+      Game.renderKPIs({});
+      document.getElementById('status').className = 'status ' + (ok?'ok':'err');
+      document.getElementById('status').textContent = ok? 'Pronounced ✔' : 'Not a valid word ✖';
+      document.getElementById('answer').value='';
+      return;
+    }
+    Game.submitAnswer();
+  });
+  document.getElementById('btnShow').addEventListener('click', ()=>{
+    const c = Game.getCurrent();
+    if (c){ document.getElementById('hintArea').textContent = c; setTimeout(()=>{ document.getElementById('hintArea').textContent=''; }, 2000); }
+  });
+  document.getElementById('btnAddReview').addEventListener('click', ()=>{ Game.addToReview(); });
+  document.getElementById('btnPracticeReview').addEventListener('click', ()=>{ Game.practiceReviewOnce(); });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e)=>{
+    if (e.key==='Enter' && !e.shiftKey && !e.ctrlKey){ e.preventDefault(); document.getElementById('btnSubmit').click(); }
+    else if (e.key==='Enter' && e.ctrlKey){ e.preventDefault(); document.getElementById('btnSkip').click(); }
+    else if (e.key==='Escape'){ e.preventDefault(); document.getElementById('btnRepeat').click(); }
+  });
+
+  // Start default session
+  Game.beginMode();
+})();
+
+function renderReviewList(){
+  const list = document.getElementById('reviewList');
+  const rev = Storage.state().review;
+  if (!rev.length){ list.innerHTML = `<div class="mini">No review items yet.</div>`; return; }
+  list.innerHTML = rev.map(r=>`
+    <div class="list-item">
+      <span>${r.text}</span>
+      <span class="row">
+        <button class="ghost" onclick="(function(t){ Storage.removeReview(t); renderReviewList(); })(\`${r.text.replace(/`/g,'\\`')}\`)">Remove</button>
+      </span>
+    </div>
+  `).join('');
+}
+</script>
+</body>
+</html>
